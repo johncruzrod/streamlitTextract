@@ -32,11 +32,6 @@ def start_job(s3_object, feature_types):
     try:
         bucket_name = s3_object.split('/')[2]
         object_name = '/'.join(s3_object.split('/')[3:])
-        st.write(f"Starting Textract job for object: s3://{bucket_name}/{object_name}")
-        st.write(f"Bucket Name: {bucket_name}")
-        st.write(f"Object Key: {object_name}")
-        st.write(f"Region Name: {AWS_REGION_NAME}")
-        
         response = textract_client.start_document_analysis(
             DocumentLocation={'S3Object': {'Bucket': bucket_name, 'Name': object_name}},
             FeatureTypes=feature_types
@@ -45,6 +40,7 @@ def start_job(s3_object, feature_types):
     except Exception as e:
         st.error(f"Error occurred while starting Textract job: {str(e)}")
         return None
+
 
 def get_job_results(job_id):
     try:
