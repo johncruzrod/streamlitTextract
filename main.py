@@ -2,6 +2,7 @@ import streamlit as st
 import boto3
 import time
 import pandas as pd
+from io import StringIO 
 
 
 # Retrieve AWS credentials from Streamlit secrets
@@ -138,7 +139,7 @@ def main():
                         if tables_csv:
                             for i, table_csv in enumerate(tables_csv, start=1):
                                 st.write(f"Table {i}:")
-                                df = pd.read_csv(pd.compat.StringIO(table_csv), header=None)
+                                df = pd.read_csv(StringIO(table_csv), header=None)
                                 st.dataframe(df)
 
 if __name__ == '__main__':
