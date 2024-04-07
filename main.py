@@ -1,6 +1,5 @@
 import streamlit as st
 import boto3
-from PyPDF2 import PdfReader
 from io import BytesIO
 
 # Retrieve AWS credentials from Streamlit secrets
@@ -15,49 +14,35 @@ textract_client = boto3.client('textract',
                                region_name=AWS_REGION_NAME)
 
 def extract_text(file):
-    pdf_reader = PdfReader(file)
-    num_pages = len(pdf_reader.pages)
-    text = ""
-
-    for page_num in range(num_pages):
-        page = pdf_reader.pages[page_num]
-        page_data = BytesIO(page.extract_text().encode('utf-8'))
-        
-        try:
-            response = textract_client.detect_document_text(Document={'Bytes': page_data.getvalue()})
-            for item in response['Blocks']:
-                if item['BlockType'] == 'LINE':
-                    text += item['Text'] + '\n'
-        except textract_client.exceptions.UnsupportedDocumentException:
-            st.error(f"Unsupported document format on page {page_num + 1}. Skipping this page.")
-        
-    return text
+    try:
+        response = textract_client.detect_document_text(Document={'Bytes': file.read()})
+        text = ""
+        for item in response['Blocks']:
+            if item['BlockType'] == 'LINE':
+                text += item['Text'] + '\n'
+        return text
+    except Exception as e:
+        st.error(f"Error occurred while extracting text: {str(e)}")
+        return None
 
 def extract_tables(file):
-    pdf_reader = PdfReader(file)
-    num_pages = len(pdf_reader.pages)
-    tables = []
-
-    for page_num in range(num_pages):
-        page = pdf_reader.pages[page_num]
-        page_data = BytesIO(page.extract_text().encode('utf-8'))
-        
-        try:
-            response = textract_client.analyze_document(Document={'Bytes': page_data.getvalue()}, FeatureTypes=['TABLES'])
-            for table in response['Blocks']:
-                if table['BlockType'] == 'TABLE':
-                    table_data = []
-                    for row in table['Relationships'][0]['Ids']:
-                        row_data = []
-                        for cell in response['Blocks'][row]['Relationships'][0]['Ids']:
-                            cell_text = response['Blocks'][cell]['Text']
-                            row_data.append(cell_text)
-                        table_data.append(row_data)
-                    tables.append(table_data)
-        except textract_client.exceptions.UnsupportedDocumentException:
-            st.error(f"Unsupported document format on page {page_num + 1}. Skipping this page.")
-        
-    return tables
+    try:
+        response = textract_client.analyze_document(Document={'Bytes': file.read()}, FeatureTypes=['TABLES'])
+        tables = []
+        for table in response['Blocks']:
+            if table['BlockType'] == 'TABLE':
+                table_data = []
+                for row in table['Relationships'][0]['Ids']:
+                    row_data = []
+                    for cell in response['Blocks'][row]['Relationships'][0]['Ids']:
+                        cell_text = response['Blocks'][cell]['Text']
+                        row_data.append(cell_text)
+                    table_data.append(row_data)
+                tables.append(table_data)
+        return tables
+    except Exception as e:
+        st.error(f"Error occurred while extracting tables: {str(e)}")
+        return None
 
 def main():
     st.title('Amazon Textract File Processing')
