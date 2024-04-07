@@ -61,15 +61,25 @@ def extract_text(response):
 
 def extract_tables(response):
     tables = []
-    for table in response['Blocks']:
-        if table['BlockType'] == 'TABLE':
+    # Create a dictionary to hold block Ids and their corresponding text
+    block_map = {block['Id']: block for block in response['Blocks'] if 'BlockType' in block}
+    
+    for block in response['Blocks']:
+        if block['BlockType'] == 'TABLE':
             table_data = []
-            for row in table['Relationships'][0]['Ids']:
-                row_data = []
-                for cell in response['Blocks'][row]['Relationships'][0]['Ids']:
-                    cell_text = response['Blocks'][cell]['Text']
-                    row_data.append(cell_text)
-                table_data.append(row_data)
+            if 'Relationships' in block:
+                for relationship in block['Relationships']:
+                    if relationship['Type'] == 'CHILD':
+                        for child_id in relationship['Ids']:
+                            row_data = []
+                            cell = block_map[child_id]
+                            if 'Relationships' in cell and cell['Relationships']:
+                                for rel in cell['Relationships']:
+                                    if rel['Type'] == 'CHILD':
+                                        for cid in rel['Ids']:
+                                            cell_block = block_map[cid]
+                                            row_data.append(cell_block.get('Text', ''))
+                            table_data.append(row_data)
             tables.append(table_data)
     return tables
 
