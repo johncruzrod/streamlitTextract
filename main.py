@@ -1,6 +1,6 @@
 import streamlit as st
 import boto3
-import PyPDF2
+from PyPDF2 import PdfReader
 from io import BytesIO
 
 # Retrieve AWS credentials from Streamlit secrets
@@ -15,13 +15,13 @@ textract_client = boto3.client('textract',
                                region_name=AWS_REGION_NAME)
 
 def extract_text(file):
-    pdf_reader = PyPDF2.PdfFileReader(file)
-    num_pages = pdf_reader.numPages
+    pdf_reader = PdfReader(file)
+    num_pages = len(pdf_reader.pages)
     text = ""
 
     for page_num in range(num_pages):
-        page = pdf_reader.getPage(page_num)
-        page_data = BytesIO(page.extractText().encode('utf-8'))
+        page = pdf_reader.pages[page_num]
+        page_data = BytesIO(page.extract_text().encode('utf-8'))
         
         try:
             response = textract_client.detect_document_text(Document={'Bytes': page_data.getvalue()})
@@ -34,13 +34,13 @@ def extract_text(file):
     return text
 
 def extract_tables(file):
-    pdf_reader = PyPDF2.PdfFileReader(file)
-    num_pages = pdf_reader.numPages
+    pdf_reader = PdfReader(file)
+    num_pages = len(pdf_reader.pages)
     tables = []
 
     for page_num in range(num_pages):
-        page = pdf_reader.getPage(page_num)
-        page_data = BytesIO(page.extractText().encode('utf-8'))
+        page = pdf_reader.pages[page_num]
+        page_data = BytesIO(page.extract_text().encode('utf-8'))
         
         try:
             response = textract_client.analyze_document(Document={'Bytes': page_data.getvalue()}, FeatureTypes=['TABLES'])
