@@ -58,26 +58,45 @@ def extract_text(response):
     return text
 
 def extract_tables(response):
-    block_map = {block['Id']: block for block in response['Blocks'] if 'BlockType' in block}
+    # First, we create a map of all blocks for easy reference
+    block_map = {block['Id']: block for block in response['Blocks']}
+    
+    # Then, we extract the TABLE blocks
     tables = []
-
     for block in response['Blocks']:
         if block['BlockType'] == 'TABLE':
-            cells = [block_map[cell_id] for r in block.get('Relationships', [])
-                     for cell_id in r.get('Ids', []) if block_map[cell_id]['BlockType'] == 'CELL']
-            cells_by_row = {}
-            for cell in cells:
-                row_index = cell['RowIndex']
-                col_index = cell['ColumnIndex']
-                cells_by_row.setdefault(row_index, {})[col_index] = cell.get('Text', '')
+            # For each table, we'll store its rows in a dictionary
+            rows = {}
+            for rel in block.get('Relationships', []):
+                if rel['Type'] == 'CHILD':
+                    for child_id in rel['Ids']:
+                        cell = block_map[child_id]
+                        if 'RowIndex' in cell and 'ColumnIndex' in cell:
+                            # Adjust for zero indexing discrepancy between Textract and pandas
+                            row_index = cell['RowIndex'] - 1
+                            col_index = cell['ColumnIndex'] - 1
+                            if row_index not in rows:
+                                rows[row_index] = {}
+                            # We extract and store the text from each cell
+                            rows[row_index][col_index] = get_cell_text(cell, block_map)
 
-            table_csv = ''
-            for row_index in sorted(cells_by_row.keys()):
-                row_values = [str(cells_by_row[row_index][col_index]) for col_index in sorted(cells_by_row[row_index].keys())]
-                table_csv += ','.join(row_values) + '\n'
-
+            # Convert rows to a DataFrame, handling missing cells by filling them with empty strings
+            table_df = pd.DataFrame(rows).T.fillna('')
+            table_csv = table_df.to_csv(index=False, header=False)
             tables.append(table_csv)
     return tables
+
+def get_cell_text(cell, block_map):
+    text = ''
+    for rel in cell.get('Relationships', []):
+        if rel['Type'] == 'CHILD':
+            for child_id in rel['Ids']:
+                word = block_map[child_id]
+                if word['BlockType'] == 'WORD':
+                    text += word['Text'] + ' '
+                elif word['BlockType'] == 'SELECTION_ELEMENT' and word['SelectionStatus'] == 'SELECTED':
+                    text += 'X '
+    return text.strip()
 
 def main():
     st.title('Amazon Textract File Processing')
@@ -93,13 +112,14 @@ def main():
             if s3_object:
                 if option == 'Extract Text':
                     feature_types = ['TABLES', 'FORMS']
-                else:  # 'Extract Tables'
+                else:
                     feature_types = ['TABLES']
                 
                 job_id = start_job(s3_object, feature_types)
                 
                 if job_id:
                     with st.spinner('Processing...'):
+                        response = None
                         while True:
                             response = get_job_results(job_id)
                             if response['JobStatus'] == 'SUCCEEDED':
@@ -114,12 +134,12 @@ def main():
                         if text:
                             st.write(text)
                     elif option == 'Extract Tables':
-                        tables = extract_tables(response)
-                        if tables:
-                            for i, table_csv in enumerate(tables, start=1):
+                        tables_csv = extract_tables(response)
+                        if tables_csv:
+                            for i, table_csv in enumerate(tables_csv, start=1):
                                 st.write(f"Table {i}:")
-                                table_data = [row.split(',') for row in table_csv.split('\n') if row]
-                                st.table(table_data)
+                                df = pd.read_csv(pd.compat.StringIO(table_csv), header=None)
+                                st.dataframe(df)
 
 if __name__ == '__main__':
     main()
