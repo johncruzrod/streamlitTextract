@@ -1,6 +1,8 @@
 import streamlit as st
 import boto3
 import time
+import pandas as pd
+
 
 # Retrieve AWS credentials from Streamlit secrets
 AWS_ACCESS_KEY_ID = st.secrets['AWS_ACCESS_KEY_ID']
@@ -60,27 +62,25 @@ def extract_text(response):
     return text
 
 def extract_tables(response):
-    tables = []
     # Create a dictionary to hold block Ids and their corresponding text
     block_map = {block['Id']: block for block in response['Blocks'] if 'BlockType' in block}
-    
+    tables = []
+
     for block in response['Blocks']:
         if block['BlockType'] == 'TABLE':
-            table_data = []
-            if 'Relationships' in block:
-                for relationship in block['Relationships']:
-                    if relationship['Type'] == 'CHILD':
-                        for child_id in relationship['Ids']:
-                            row_data = []
-                            cell = block_map[child_id]
-                            if 'Relationships' in cell and cell['Relationships']:
-                                for rel in cell['Relationships']:
-                                    if rel['Type'] == 'CHILD':
-                                        for cid in rel['Ids']:
-                                            cell_block = block_map[cid]
-                                            row_data.append(cell_block.get('Text', ''))
-                            table_data.append(row_data)
-            tables.append(table_data)
+            # Get all cells for this table
+            cells = [block_map[cell_id] for r in block.get('Relationships', [])
+                     for cell_id in r.get('Ids', []) if block_map[cell_id]['BlockType'] == 'CELL']
+            # Group cells by their row and column
+            cells_by_row = {}
+            for cell in cells:
+                row_index = cell['RowIndex']
+                col_index = cell['ColumnIndex']
+                cells_by_row.setdefault(row_index, {})[col_index] = cell.get('Text', '')
+
+            # Convert the dictionary to a DataFrame
+            table_df = pd.DataFrame(cells_by_row).sort_index().sort_index(axis=1)
+            tables.append(table_df)
     return tables
 
 def main():
@@ -91,22 +91,21 @@ def main():
     if uploaded_file is not None:
         option = st.radio('Select processing option', ('Extract Text', 'Extract Tables'))
         
-        # Add an 'Extract' button to initiate the OCR process
         if st.button('Extract'):
-            # Upload the file to S3
             s3_object = upload_to_s3(uploaded_file, 'streamlit-bucket-1', uploaded_file.name)
             
             if s3_object:
+                # Determine feature types based on user selection
                 if option == 'Extract Text':
                     feature_types = ['TABLES', 'FORMS']
-                else:
+                else:  # 'Extract Tables'
                     feature_types = ['TABLES']
                 
                 job_id = start_job(s3_object, feature_types)
                 
                 if job_id:
                     with st.spinner('Processing...'):
-                        # Loop to check job completion
+                        # Check job completion
                         while True:
                             response = get_job_results(job_id)
                             if response['JobStatus'] == 'SUCCEEDED':
@@ -114,18 +113,19 @@ def main():
                             elif response['JobStatus'] == 'FAILED':
                                 st.error('The document analysis failed.')
                                 return
-                            time.sleep(5)
+                            time.sleep(5)  # Adjust time as needed
                     
+                    # Process results based on user option
                     if option == 'Extract Text':
                         text = extract_text(response)
                         if text:
                             st.write(text)
-                    else:
+                    elif option == 'Extract Tables':  # Correctly handle 'Extract Tables' as a separate case
                         tables = extract_tables(response)
                         if tables:
-                            for i, table in enumerate(tables, start=1):
+                            for i, table_df in enumerate(tables, start=1):
                                 st.write(f"Table {i}:")
-                                st.table(table)
+                                st.dataframe(table_df)
 
 if __name__ == '__main__':
     main()
