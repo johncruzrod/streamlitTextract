@@ -13,35 +13,20 @@ textract_client = boto3.client('textract',
                                region_name=AWS_REGION_NAME)
 
 def extract_text(file):
-    try:
-        response = textract_client.detect_document_text(Document={'Bytes': file.read()})
-        text = ''
-        for item in response['Blocks']:
-            if item['BlockType'] == 'LINE':
-                text += item['Text'] + '\n'
-        return text
-    except textract_client.exceptions.UnsupportedDocumentException:
-        st.error("Unsupported document format. Please upload a PDF, PNG, JPG, or JPEG file.")
-        return None
+    response = textract_client.detect_document_text(Document={'Bytes': file.read()})
+    text = ''
+    for item in response['Blocks']:
+        if item['BlockType'] == 'LINE':
+            text += item['Text'] + '\n'
+    return text
 
 def extract_tables(file):
-    try:
-        response = textract_client.analyze_document(Document={'Bytes': file.read()}, FeatureTypes=['TABLES'])
-        tables = []
-        for table in response['Blocks']:
-            if table['BlockType'] == 'TABLE':
-                table_data = []
-                for row in table['Relationships'][0]['Ids']:
-                    row_data = []
-                    for cell in response['Blocks'][row]['Relationships'][0]['Ids']:
-                        cell_text = response['Blocks'][cell]['Text']
-                        row_data.append(cell_text)
-                    table_data.append(row_data)
-                tables.append(table_data)
-        return tables
-    except textract_client.exceptions.UnsupportedDocumentException:
-        st.error("Unsupported document format. Please upload a PDF, PNG, JPG, or JPEG file.")
-        return None
+    response = textract_client.analyze_document(Document={'Bytes': file.read()}, FeatureTypes=['TABLES'])
+    tables = []
+    for table in response['Blocks']:
+        if table['BlockType'] == 'TABLE':
+            tables.append(table)
+    return tables
 
 def main():
     st.title('Amazon Textract File Processing')
@@ -53,14 +38,11 @@ def main():
         
         if option == 'Extract Text':
             text = extract_text(uploaded_file)
-            if text:
-                st.write(text)
+            st.write(text)
         else:
             tables = extract_tables(uploaded_file)
-            if tables:
-                for i, table in enumerate(tables, start=1):
-                    st.write(f"Table {i}:")
-                    st.table(table)
+            for table in tables:
+                st.write(table)
 
 if __name__ == '__main__':
     main()
