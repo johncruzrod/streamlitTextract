@@ -80,7 +80,7 @@ def main():
     
     if uploaded_file is not None:
         # Upload the file to S3
-        s3_object = upload_to_s3(uploaded_file, 'textract-streamlit-1', uploaded_file.name)
+        s3_object = upload_to_s3(uploaded_file, 'streamlit-bucket-1', uploaded_file.name)
         
         if s3_object:
             option = st.radio('Select processing option', ('Extract Text', 'Extract Tables'))
