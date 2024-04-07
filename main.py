@@ -1,64 +1,106 @@
-import time
-import boto3
 import streamlit as st
-from botocore.exceptions import NoCredentialsError
+import boto3
+import time
 
-# Initialise the boto3 client for Textract in an async way
-def initialise_textract_client():
-    return boto3.client(
-        'textract',
-        aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
-        region_name=st.secrets["AWS_REGION_NAME"]
-    )
+# Retrieve AWS credentials from Streamlit secrets
+AWS_ACCESS_KEY_ID = st.secrets['AWS_ACCESS_KEY_ID']
+AWS_SECRET_ACCESS_KEY = st.secrets['AWS_SECRET_ACCESS_KEY']
+AWS_REGION_NAME = st.secrets['AWS_REGION_NAME']
 
-# Start an asynchronous job to process the document
-def start_textract_job(textract_client, file_content, feature_type):
-    if feature_type == 'text':
-        response = textract_client.start_document_text_detection(Document={'Bytes': file_content})
-    elif feature_type == 'tables':
-        response = textract_client.start_document_analysis(Document={'Bytes': file_content}, FeatureTypes=['TABLES'])
-    return response['JobId']
+# Initialize boto3 clients
+textract_client = boto3.client('textract',
+                               aws_access_key_id=AWS_ACCESS_KEY_ID,
+                               aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+                               region_name=AWS_REGION_NAME)
 
-# Check the status of the Textract job
-def is_job_complete(textract_client, job_id):
-    response = textract_client.get_document_analysis(JobId=job_id)
-    status = response['JobStatus']
-    return status == 'SUCCEEDED'
+s3_client = boto3.client('s3',
+                         aws_access_key_id=AWS_ACCESS_KEY_ID,
+                         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+                         region_name=AWS_REGION_NAME)
 
-# Get the results of the Textract job
-def get_job_results(textract_client, job_id):
-    response = textract_client.get_document_analysis(JobId=job_id)
-    return response
+def upload_to_s3(file, bucket, key):
+    try:
+        s3_client.upload_fileobj(file, bucket, key)
+        return f's3://{bucket}/{key}'
+    except Exception as e:
+        st.error(f"Error occurred while uploading file to S3: {str(e)}")
+        return None
 
-# Streamlit app layout
+def start_job(s3_object, feature_types):
+    try:
+        response = textract_client.start_document_analysis(
+            DocumentLocation={'S3Object': {'Bucket': s3_object.split('/')[2], 'Name': s3_object.split('/')[3]}},
+            FeatureTypes=feature_types
+        )
+        return response['JobId']
+    except Exception as e:
+        st.error(f"Error occurred while starting Textract job: {str(e)}")
+        return None
+
+def get_job_results(job_id):
+    try:
+        response = textract_client.get_document_analysis(JobId=job_id)
+        return response
+    except Exception as e:
+        st.error(f"Error occurred while getting Textract job results: {str(e)}")
+        return None
+
+def extract_text(response):
+    text = ""
+    for item in response['Blocks']:
+        if item['BlockType'] == 'LINE':
+            text += item['Text'] + '\n'
+    return text
+
+def extract_tables(response):
+    tables = []
+    for table in response['Blocks']:
+        if table['BlockType'] == 'TABLE':
+            table_data = []
+            for row in table['Relationships'][0]['Ids']:
+                row_data = []
+                for cell in response['Blocks'][row]['Relationships'][0]['Ids']:
+                    cell_text = response['Blocks'][cell]['Text']
+                    row_data.append(cell_text)
+                table_data.append(row_data)
+            tables.append(table_data)
+    return tables
+
 def main():
-    st.title('AWS Textract Document Processing (Asynchronous)')
+    st.title('Amazon Textract File Processing')
     
-    textract_client = initialise_textract_client()
-    
-    uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg', 'tiff'])
+    uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
     
     if uploaded_file is not None:
-        feature_type = st.selectbox("Choose the feature", ('text', 'tables'))
-        if st.button('Process Document'):
-            try:
-                # Start the Textract job
-                job_id = start_textract_job(textract_client, uploaded_file.read(), feature_type)
-                st.write(f"Started job {job_id}, waiting for the results...")
+        # Upload the file to S3
+        s3_object = upload_to_s3(uploaded_file, 'textract-streamlit-1', uploaded_file.name)
+        
+        if s3_object:
+            option = st.radio('Select processing option', ('Extract Text', 'Extract Tables'))
+            
+            if option == 'Extract Text':
+                job_id = start_job(s3_object, ['TABLES', 'FORMS'])
+            else:
+                job_id = start_job(s3_object, ['TABLES'])
+            
+            if job_id:
+                with st.spinner('Processing...'):
+                    while True:
+                        response = get_job_results(job_id)
+                        if response['JobStatus'] == 'SUCCEEDED':
+                            break
+                        time.sleep(1)
                 
-                # Wait for the Textract job to complete
-                while not is_job_complete(textract_client, job_id):
-                    time.sleep(5)
-                
-                # Retrieve the results
-                result = get_job_results(textract_client, job_id)
-                st.write(result) # Here, you would format and display the result as needed
-                
-            except NoCredentialsError:
-                st.error("Could not authenticate with AWS. Check your credentials.")
-            except Exception as e:
-                st.error(f"Error processing file: {e}")
+                if option == 'Extract Text':
+                    text = extract_text(response)
+                    if text:
+                        st.write(text)
+                else:
+                    tables = extract_tables(response)
+                    if tables:
+                        for i, table in enumerate(tables, start=1):
+                            st.write(f"Table {i}:")
+                            st.table(table)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
