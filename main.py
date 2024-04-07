@@ -89,35 +89,47 @@ def main():
     uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
     
     if uploaded_file is not None:
-        # Upload the file to S3
-        s3_object = upload_to_s3(uploaded_file, 'streamlit-bucket-1', uploaded_file.name)
+        option = st.radio('Select processing option', ('Extract Text', 'Extract Tables'))
         
-        if s3_object:
-            option = st.radio('Select processing option', ('Extract Text', 'Extract Tables'))
+        # Add an 'Extract' button to initiate the OCR process
+        if st.button('Extract'):
+            # Upload the file to S3
+            s3_object = upload_to_s3(uploaded_file, 'streamlit-bucket-1', uploaded_file.name)
             
-            if option == 'Extract Text':
-                job_id = start_job(s3_object, ['TABLES', 'FORMS'])
-            else:
-                job_id = start_job(s3_object, ['TABLES'])
-            
-            if job_id:
-                with st.spinner('Processing...'):
-                    while True:
-                        response = get_job_results(job_id)
-                        if response['JobStatus'] == 'SUCCEEDED':
-                            break
-                        time.sleep(1)
-                
+            if s3_object:
                 if option == 'Extract Text':
-                    text = extract_text(response)
-                    if text:
-                        st.write(text)
+                    feature_types = ['TABLES', 'FORMS']
                 else:
-                    tables = extract_tables(response)
-                    if tables:
-                        for i, table in enumerate(tables, start=1):
-                            st.write(f"Table {i}:")
-                            st.table(table)
+                    feature_types = ['TABLES']
+                
+                job_id = start_job(s3_object, feature_types)
+                
+                if job_id:
+                    with st.spinner('Processing...'):
+                        # Loop to check job completion
+                        while True:
+                            response = get_job_results(job_id)
+                            if response['JobStatus'] == 'SUCCEEDED':
+                                break
+                            elif response['JobStatus'] == 'FAILED':
+                                st.error('The document analysis failed.')
+                                return
+                            time.sleep(5)
+                    
+                    if option == 'Extract Text':
+                        text = extract_text(response)
+                        if text:
+                            st.write(text)
+                    else:
+                        tables = extract_tables(response)
+                        if tables:
+                            for i, table in enumerate(tables, start=1):
+                                st.write(f"Table {i}:")
+                                st.table(table)
+
+if __name__ == '__main__':
+    main()
+
 
 if __name__ == '__main__':
     main()
