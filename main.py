@@ -1,76 +1,56 @@
 import streamlit as st
 import boto3
-import pandas as pd
 
-# Function to initialise the boto3 Textract client using Streamlit secrets
-def initialise_textract_client():
-    return boto3.client(
-        'textract',
-        aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"],
-        region_name=st.secrets["AWS_REGION"]
-    )
+# Retrieve AWS credentials from Streamlit secrets
+AWS_ACCESS_KEY_ID = st.secrets['AWS_ACCESS_KEY_ID']
+AWS_SECRET_ACCESS_KEY = st.secrets['AWS_SECRET_ACCESS_KEY']
+AWS_REGION_NAME = st.secrets['AWS_REGION_NAME']
 
-# Process file and extract text
-def extract_text(textract_client, file_content):
-    response = textract_client.detect_document_text(Document={'Bytes': file_content})
-    lines = [item['Text'] for item in response['Blocks'] if item['BlockType'] == 'LINE']
-    return '\n'.join(lines)
+# Initialize boto3 clients
+textract_client = boto3.client('textract', 
+                               aws_access_key_id=AWS_ACCESS_KEY_ID,
+                               aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+                               region_name=AWS_REGION_NAME)
 
-# Process file and extract tables
-def extract_tables(textract_client, file_content):
-    response = textract_client.analyze_document(Document={'Bytes': file_content}, FeatureTypes=['TABLES'])
-    
-    # Collecting the information about the tables
-    blocks = response['Blocks']
-    tables = {}
-    for block in blocks:
-        if block['BlockType'] == 'TABLE':
-            table_id = block['Id']
-            tables[table_id] = []
-        if block['BlockType'] == 'CELL':
-            table_id = block['Page']['Table']['Id']
-            row_index = block['RowIndex'] - 1
-            col_index = block['ColumnIndex'] - 1
-            text = block.get('Text', '')
-            
-            # Make sure the row has enough columns
-            while len(tables[table_id]) <= row_index:
-                tables[table_id].append([])
-            while len(tables[table_id][row_index]) <= col_index:
-                tables[table_id][row_index].append('')
-                
-            tables[table_id][row_index][col_index] = text
-            
-    # Convert the dictionary of tables to a list of DataFrame objects
-    dataframes = []
-    for table_id, rows in tables.items():
-        df = pd.DataFrame(rows)
-        dataframes.append(df)
-    
-    return dataframes
+def extract_text(file):
+    response = textract_client.detect_document_text(Document={'Bytes': file.read()})
+    text = ''
+    for item in response['Blocks']:
+        if item['BlockType'] == 'LINE':
+            text += item['Text'] + '\n'
+    return text
 
-# Main Streamlit app
+def extract_tables(file):
+    response = textract_client.analyze_document(Document={'Bytes': file.read()}, FeatureTypes=['TABLES'])
+    tables = []
+    for table in response['Blocks']:
+        if table['BlockType'] == 'TABLE':
+            table_data = []
+            for row in table['Relationships'][0]['Ids']:
+                row_data = []
+                for cell in response['Blocks'][row]['Relationships'][0]['Ids']:
+                    cell_text = response['Blocks'][cell]['Text']
+                    row_data.append(cell_text)
+                table_data.append(row_data)
+            tables.append(table_data)
+    return tables
+
 def main():
-    st.title('AWS Textract Document Processor')
-
-    textract_client = initialise_textract_client()
-    uploaded_file = st.file_uploader("Choose a file to process", type=['pdf', 'png', 'jpg', 'jpeg', 'tiff'])
+    st.title('Amazon Textract File Processing')
     
-    if uploaded_file:
-        feature_type = st.radio("Feature type", ['Text', 'Tables'])
-        if st.button('Process'):
-            file_content = uploaded_file.read()
-            if feature_type == 'Text':
-                text = extract_text(textract_client, file_content)
-                st.subheader('Extracted Text')
-                st.write(text)
-            else:
-                tables = extract_tables(textract_client, file_content)
-                st.subheader('Extracted Tables')
-                for i, df in enumerate(tables, start=1):
-                    st.write(f"Table {i}")
-                    st.dataframe(df)
+    uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
+    
+    if uploaded_file is not None:
+        option = st.radio('Select processing option', ('Extract Text', 'Extract Tables'))
+        
+        if option == 'Extract Text':
+            text = extract_text(uploaded_file)
+            st.write(text)
+        else:
+            tables = extract_tables(uploaded_file)
+            for i, table in enumerate(tables, start=1):
+                st.write(f"Table {i}:")
+                st.table(table)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
