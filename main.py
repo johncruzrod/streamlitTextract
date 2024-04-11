@@ -33,7 +33,8 @@ def upload_to_s3(file, bucket, key):
         return None
 
 def start_job(s3_object):
-    feature_types = ['TABLES', 'FORMS']
+    # Specify only 'TABLES' if you want tables, remove 'FORMS' to avoid form fields results
+    feature_types = ['TABLES']  # Removed 'FORMS' from this list
     try:
         bucket_name = s3_object.split('/')[2]
         object_name = '/'.join(s3_object.split('/')[3:])
@@ -43,7 +44,7 @@ def start_job(s3_object):
         )
         return response['JobId']
     except Exception as e:
-        st.error(f"Error occurred while starting Textract job: {e}")
+        st.error(f"Error occurred while starting Textract job: {str(e)}")
         return None
 
 def get_job_results(job_id, timeout=3600):  # Timeout in seconds
