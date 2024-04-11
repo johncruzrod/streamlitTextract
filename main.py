@@ -135,20 +135,28 @@ def get_text(block, blocks):
     return text.strip()
 
 def summarize_with_anthropic(document_text, tables):
-    # Combine document text and tables into a single string
-    full_text = document_text + "\n\n" + "\n\n".join([pd.read_csv(StringIO(table)).to_string(index=False) for table in tables])
-    
-    system_message = f"Data contents: {full_text}. You will summarize this content in a detailed report. Be precise, and avoid errors."
-    
+    full_text = document_text + "\n" + "\n".join([pd.read_csv(StringIO(table)).to_string(index=False, header=False) for table in tables])
+
     try:
-        response = client.completion(
-            model="claude-v1-100k",
-            prompt=system_message,
-            max_tokens_to_sample=1024,
-            temperature=0.7,
+        message = client.messages.create(
+            model="claude-3-opus-20240229",
+            max_tokens=350,
+            temperature=1,
+            system=f"Data contents: {full_text}. You will summarize this content in a detailed report. Be precise, and avoid errors.",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Please summarize the provided text and tables thoroughly."
+                }
+            ]
         )
-    
-        return response.completion
+
+        if hasattr(message, 'content') and isinstance(message.content, list):
+            response_text = '\n'.join(block.text for block in message.content if block.type == 'text')
+        else:
+            response_text = "Unexpected response format or no match found."
+
+        return response_text
     except Exception as e:
         return f"Error in summarization: {str(e)}"
 
