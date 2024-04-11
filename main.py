@@ -54,7 +54,7 @@ def get_job_results(job_id):
 def process_document(response):
     document_text = ""
     tables = []
-    forms = []
+    form_fields = {}
     
     for item in response['Blocks']:
         if item['BlockType'] == 'LINE':
@@ -67,9 +67,9 @@ def process_document(response):
                 key = get_text(item, response['Blocks'])
             else:
                 value = get_text(item, response['Blocks'])
-                forms.append((key, value))
+                form_fields[key] = value
     
-    return document_text, tables, forms
+    return document_text, tables, form_fields
 
 def extract_table(table_block, blocks):
     rows = {}
@@ -124,19 +124,21 @@ def main():
                             return
                         time.sleep(5)
                 
-                document_text, tables, forms = process_document(response)
-                
+                document_text, tables, form_fields = process_document(response)
+        
                 st.subheader("Extracted Text")
                 st.write(document_text)
                 
+                st.subheader("Tables")
                 for i, table_csv in enumerate(tables, start=1):
-                    st.subheader(f"Table {i}")
+                    st.write(f"Table {i}:")
                     df = pd.read_csv(StringIO(table_csv), header=None)
-                    st.dataframe(df)
+                    st.table(df)
                 
                 st.subheader("Form Fields")
-                for key, value in forms:
+                for key, value in form_fields.items():
                     st.write(f"{key}: {value}")
+
 
 if __name__ == '__main__':
     main()
