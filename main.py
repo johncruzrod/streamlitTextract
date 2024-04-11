@@ -160,39 +160,59 @@ def summarize_with_anthropic(document_text, tables):
 def main():
     st.title('Amazon Textract Document Processing')
     uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
-    bucket_name = 'streamlit-bucket-1'
+    bucket_name = 'your_bucket_name_here'  # Change to your actual bucket name
     
-    if uploaded_file:
-        # Check if we already have the processed data in the session state
-        if 'uploaded_file_name' not in st.session_state or st.session_state.uploaded_file_name != uploaded_file.name:
-            # Process the file and save results to session state
-            s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
-            if s3_object:
-                job_id = start_job(s3_object)
-                if job_id:
-                    results_pages = get_job_results(job_id)
-                    if results_pages:
-                        document_text, tables, form_fields = process_document(results_pages)
-                        st.session_state.document_text = document_text
-                        st.session_state.tables = tables
-                        st.session_state.uploaded_file_name = uploaded_file.name
-                        
-                    else:
-                        st.error("Document processing failed or did not complete successfully.")
+    # Initialize or clear previous session states related to OCR and summary process
+    if 'processing_complete' not in st.session_state or 'summary_shown' not in st.session_state:
+        st.session_state.processing_complete = False
+        st.session_state.summary_shown = False
+
+    if uploaded_file is not None and not st.session_state.processing_complete:
+        # Upload to S3 and process the document with Textract
+        s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
+        if s3_object:
+            job_id = start_job(s3_object)
+            if job_id:
+                results_pages = get_job_results(job_id)
+                if results_pages:
+                    document_text, tables, _ = process_document(results_pages)
+                    st.session_state.processing_complete = True  # Mark OCR processing as complete
+                    st.subheader("Extracted Text")
+                    st.text_area('Text', document_text, height=300)
+                    
+                    st.subheader("Extracted Tables")
+                    for i, table_csv in enumerate(tables, start=1):
+                        st.write(f"Table {i}:")
+                        df = pd.read_csv(StringIO(table_csv))
+                        st.dataframe(df)
+                    
+                    # Save the processed data for summarization
+                    st.session_state.document_text = document_text
+                    st.session_state.tables = tables
+                else:
+                    st.error("Document processing failed or did not complete successfully.")
+    
+    # Check if document was processed but summary not yet shown
+    if st.session_state.processing_complete and not st.session_state.summary_shown:
+        summarize_button = st.button('Summarize')
         
-        if 'document_text' in st.session_state and 'tables' in st.session_state:
-            col1, col2, col3 = st.columns([1, 1, 1])
-            with col2:
-                summarize_button = st.button('Summarize')
-            
-            if summarize_button:
-                with st.spinner("Summarizing..."):
-                    summary = summarize_with_anthropic(st.session_state.document_text, st.session_state.tables)
-                    st.session_state.summary = summary  # Store the summary in the session state
-                
-            if 'summary' in st.session_state:
+        if summarize_button:
+            st.session_state.summary_shown = True  # Mark summary as initiated
+            with st.spinner("Generating summary, please wait..."):
+                summary = summarize_with_anthropic(st.session_state.document_text, st.session_state.tables)
                 st.subheader("Summary")
-                st.markdown(st.session_state.summary)
+                st.markdown(summary)
+    
+    # Optionally, allow the user to reset the state to process a new document
+    if st.session_state.summary_shown:
+        if st.button("Process another document"):
+            # Reset session states
+            for key in ['processing_complete', 'summary_shown']:
+                if key in st.session_state:
+                    del st.session_state[key]
+
+if __name__ == "__main__":
+    main()
 
 def copy_to_clipboard(text):
     import pyperclip
