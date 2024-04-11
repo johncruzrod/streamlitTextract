@@ -5,7 +5,6 @@ import pandas as pd
 from io import StringIO
 import anthropic
 
-
 # Retrieve AWS credentials from Streamlit secrets
 AWS_ACCESS_KEY_ID = st.secrets['AWS_ACCESS_KEY_ID']
 AWS_SECRET_ACCESS_KEY = st.secrets['AWS_SECRET_ACCESS_KEY']
@@ -22,7 +21,6 @@ textract_client = boto3.client(
     aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
     region_name=AWS_REGION_NAME
 )
-
 s3_client = boto3.client(
     's3',
     aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -90,26 +88,22 @@ def process_document(pages):
     tables = []
     form_fields = {}
     table_block_ids = set()  # Track block IDs associated with tables
-
     for page in pages:
         for item in page['Blocks']:
             if item['BlockType'] == 'TABLE':
                 table_csv, block_ids = extract_table(item, page['Blocks'])
                 tables.append(table_csv)
                 table_block_ids.update(block_ids)
-
             elif item['BlockType'] == 'KEY_VALUE_SET':
                 if 'KEY' in item['EntityTypes']:
                     key = get_text(item, page['Blocks'])
                 elif 'VALUE' in item['EntityTypes']:
                     value = get_text(item, page['Blocks'])
                     form_fields[key] = value
-
     for page in pages:
         for item in page['Blocks']:
             if item['BlockType'] == 'LINE' and item['Id'] not in table_block_ids:
                 document_text += item['Text'] + '\n'
-
     return document_text, tables, form_fields
 
 def extract_table(table_block, blocks):
@@ -127,7 +121,6 @@ def extract_table(table_block, blocks):
                     if row_index not in table_dict:
                         table_dict[row_index] = {}
                     table_dict[row_index][col_index] = get_text(cell_block, blocks)
-
     df = pd.DataFrame.from_dict(table_dict, orient='index').sort_index().fillna('')
     return df.to_csv(index=False, header=False), block_ids
 
@@ -141,20 +134,28 @@ def get_text(block, blocks):
                     text += child_block['Text'] + ' '
     return text.strip()
 
-def summarize_with_anthropic(content):
-    message = client.messages.create(
-        model="claude-3-opus-20240229",
-        max_tokens=4000,
-        temperature=0.8,
-        messages=[{"content": content}]
-    )
-    return message.content
+def summarize_with_anthropic(document_text, tables):
+    # Combine document text and tables into a single string
+    full_text = document_text + "\n\n" + "\n\n".join([pd.read_csv(StringIO(table)).to_string(index=False) for table in tables])
+    
+    system_message = f"Data contents: {full_text}. You will summarize this content in a detailed report. Be precise, and avoid errors."
+    
+    try:
+        response = client.completion(
+            model="claude-v1-100k",
+            prompt=system_message,
+            max_tokens_to_sample=1024,
+            temperature=0.7,
+        )
+    
+        return response.completion
+    except Exception as e:
+        return f"Error in summarization: {str(e)}"
 
 def main():
     st.title('Amazon Textract Document Processing')
     uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
     bucket_name = 'streamlit-bucket-1'
-
     if uploaded_file:
         s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
         if s3_object:
@@ -168,21 +169,15 @@ def main():
                     st.text_area('Text', document_text, height=300)
                     
                     st.subheader("Tables")
-                    all_tables_text = ""
                     for i, table_csv in enumerate(tables, start=1):
                         st.write(f"Table {i}:")
                         df = pd.read_csv(StringIO(table_csv))
                         st.dataframe(df)
-                        all_tables_text += df.to_string(index=False, header=False) + "\n"
-
-                    # Concatenate all text and tables into one string for summarization
-                    full_text = document_text + "\n" + all_tables_text
-
-                    if st.button('Summarize', key='summarize_button'):
-                        summary = summarize_with_anthropic(full_text)
+                    
+                    if st.button('Summarize'):
+                        summary = summarize_with_anthropic(document_text, tables)
                         st.subheader("Summary")
                         st.text_area('Summary Output', summary, height=300)
-
                 else:
                     st.error("Document processing failed or did not complete successfully.")
 
