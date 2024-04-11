@@ -43,21 +43,25 @@ def start_job(s3_object):
         )
         return response['JobId']
     except Exception as e:
-        st.error(f"Error occurred while starting Textract job: {str(e)}")
+        st.error(f"Error occurred while starting Textract job: {e}")
         return None
 
 def get_job_results(job_id):
-    time.sleep(5)  # Small delay to ensure Textract has begun processing
-    pages = []
-    response = textract_client.get_document_analysis(JobId=job_id)
-    
-    pages.append(response)
-    while response.get('NextToken', None):
-        time.sleep(5)
-        response = textract_client.get_document_analysis(JobId=job_id, NextToken=response['NextToken'])
-        pages.append(response)
+    try:
+        time.sleep(5)  # Small delay to ensure Textract has begun processing
+        pages = []
+        response = textract_client.get_document_analysis(JobId=job_id)
         
-    return pages
+        pages.append(response)
+        while response.get('NextToken', None):
+            time.sleep(5)
+            response = textract_client.get_document_analysis(JobId=job_id, NextToken=response['NextToken'])
+            pages.append(response)
+            
+        return pages
+    except Exception as e:
+        st.error(f"Error occurred while getting Textract job results: {e}")
+        return None
 
 def process_document(pages):
     document_text = ""
