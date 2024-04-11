@@ -174,11 +174,16 @@ def main():
                 if results_pages:
                     document_text, tables, form_fields = process_document(results_pages)
                     
+                    summarize_clicked = st.session_state.get('summarize_clicked', False)
+                    
                     col1, col2, col3 = st.columns([1, 1, 1])
                     with col2:
-                        summarize_button = st.button('Summarize', type="primary")
+                        if not summarize_clicked:
+                            summarize_button = st.button('Summarize', type="primary")
+                            if summarize_button:
+                                st.session_state.summarize_clicked = True
                     
-                    if not summarize_button:
+                    if not summarize_clicked:
                         st.subheader("Extracted Text")
                         st.text_area('Text', document_text, height=300)
                         
