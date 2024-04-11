@@ -174,23 +174,22 @@ def main():
                 if results_pages:
                     document_text, tables, form_fields = process_document(results_pages)
                     
-                    st.subheader("Extracted Text")
-                    st.text_area('Text', document_text, height=300)
-                    
-                    st.subheader("Tables")
-                    for i, table_csv in enumerate(tables, start=1):
-                        st.write(f"Table {i}:")
-                        df = pd.read_csv(StringIO(table_csv))
-                        st.dataframe(df)
-                    
-                    st.markdown("<br>", unsafe_allow_html=True)  # Add some vertical space
-                    
                     col1, col2, col3 = st.columns([1, 1, 1])
                     with col2:
                         summarize_button = st.button('Summarize', type="primary")
                     
-                    if summarize_button:
-                        summary = summarize_with_anthropic(document_text, tables)
+                    if not summarize_button:
+                        st.subheader("Extracted Text")
+                        st.text_area('Text', document_text, height=300)
+                        
+                        st.subheader("Tables")
+                        for i, table_csv in enumerate(tables, start=1):
+                            st.write(f"Table {i}:")
+                            df = pd.read_csv(StringIO(table_csv))
+                            st.dataframe(df)
+                    else:
+                        with st.spinner("Summarizing..."):
+                            summary = summarize_with_anthropic(document_text, tables)
                         
                         st.markdown("<br>", unsafe_allow_html=True)  # Add some vertical space
                         
