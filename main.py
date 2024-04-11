@@ -136,7 +136,6 @@ def get_text(block, blocks):
 
 def summarize_with_anthropic(document_text, tables):
     full_text = document_text + "\n" + "\n".join([pd.read_csv(StringIO(table)).to_string(index=False, header=False) for table in tables])
-
     try:
         message = client.messages.create(
             model="claude-3-opus-20240229",
@@ -150,12 +149,10 @@ def summarize_with_anthropic(document_text, tables):
                 }
             ]
         )
-
         if hasattr(message, 'content') and isinstance(message.content, list):
             response_text = '\n'.join(block.text for block in message.content if block.type == 'text')
         else:
             response_text = "Unexpected response format or no match found."
-
         return response_text
     except Exception as e:
         return f"Error in summarization: {str(e)}"
@@ -193,10 +190,10 @@ def main():
                             df = pd.read_csv(StringIO(table_csv))
                             st.dataframe(df)
                     else:
+                        st.empty()  # Clear the existing content
+                        
                         with st.spinner("Summarizing..."):
                             summary = summarize_with_anthropic(document_text, tables)
-                        
-                        st.markdown("<br>", unsafe_allow_html=True)  # Add some vertical space
                         
                         st.subheader("Summary")
                         st.markdown(summary)
