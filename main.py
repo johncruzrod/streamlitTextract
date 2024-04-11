@@ -156,10 +156,7 @@ def main():
                         st.write(f"Table {i}:")
                         df = pd.read_csv(StringIO(table_csv))
                         st.dataframe(df)
-                    
-                    st.subheader("Form Fields")
-                    for key, value in form_fields.items():
-                        st.write(f"{key}: {value}")
+
                 else:
                     st.error("Document processing failed or did not complete successfully.")
 
