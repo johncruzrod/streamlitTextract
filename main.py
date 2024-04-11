@@ -48,17 +48,23 @@ def start_job(s3_object):
 
 def get_job_results(job_id):
     try:
-        time.sleep(5)  # Small delay to ensure Textract has begun processing
+        time.sleep(5)  # Initial delay to let processing start
         pages = []
         response = textract_client.get_document_analysis(JobId=job_id)
-        
         pages.append(response)
-        while response.get('NextToken', None):
+
+        # Retrieve all pages of result
+        while 'NextToken' in response:
             time.sleep(5)
             response = textract_client.get_document_analysis(JobId=job_id, NextToken=response['NextToken'])
             pages.append(response)
-            
-        return pages
+
+        # Checking if the last response was successful
+        if response['JobStatus'] == 'SUCCEEDED':
+            return pages
+        else:
+            st.error(f"Document analysis didn't complete successfully. Status: {response['JobStatus']}")
+            return None
     except Exception as e:
         st.error(f"Error occurred while getting Textract job results: {e}")
         return None
@@ -130,7 +136,7 @@ def main():
             job_id = start_job(s3_object)
             if job_id:
                 results_pages = get_job_results(job_id)
-                if results_pages and all(result.get('JobStatus') == 'SUCCEEDED' for result in results_pages):
+                if results_pages:  # Check if results_pages is not None
                     document_text, tables, form_fields = process_document(results_pages)
                     st.subheader("Extracted Text")
                     st.text(document_text)
