@@ -1,55 +1,69 @@
 import streamlit as st
 import boto3
 import time
-import pandas as pd
-from io import BytesIO
 
-# Retrieve AWS credentials from Streamlit secrets (ensure these are set up in your Streamlit app settings)
-AWS_ACCESS_KEY_ID = st.secrets['AWS_ACCESS_KEY_ID']
-AWS_SECRET_ACCESS_KEY = st.secrets['AWS_SECRET_ACCESS_KEY']
-AWS_REGION_NAME = st.secrets['AWS_REGION_NAME']
+# Initialize boto3 clients
+s3_client = boto3.client('s3',
+                         aws_access_key_id=st.secrets['AWS_ACCESS_KEY_ID'],
+                         aws_secret_access_key=st.secrets['AWS_SECRET_ACCESS_KEY'],
+                         region_name=st.secrets['AWS_REGION_NAME'])
 
-# Initialize the boto3 client for Amazon Textract
 textract_client = boto3.client('textract',
-                               aws_access_key_id=AWS_ACCESS_KEY_ID,
-                               aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-                               region_name=AWS_REGION_NAME)
+                               aws_access_key_id=st.secrets['AWS_ACCESS_KEY_ID'],
+                               aws_secret_access_key=st.secrets['AWS_SECRET_ACCESS_KEY'],
+                               region_name=st.secrets['AWS_REGION_NAME'])
 
-# Function to process uploaded file and start the Textract job
-def process_file(uploaded_file):
+def upload_to_s3(file, bucket, object_name):
     try:
-        # Convert uploaded file to bytes
-        content = uploaded_file.getvalue()
-        response = textract_client.analyze_document(
-            Document={'Bytes': content},
+        s3_client.upload_fileobj(file, bucket, object_name)
+        return True
+    except Exception as e:
+        st.error(f"Error occurred while uploading file to S3: {str(e)}")
+        return False
+
+def start_textract_job(bucket, object_name):
+    try:
+        response = textract_client.start_document_analysis(
+            DocumentLocation={'S3Object': {'Bucket': bucket, 'Name': object_name}},
             FeatureTypes=['FORMS', 'TABLES']
         )
-        return response
+        return response['JobId']
     except Exception as e:
-        st.error(f"Error processing file with Textract: {str(e)}")
+        st.error(f"Error starting Textract job: {str(e)}")
         return None
 
-# Function to extract text from the Textract response
-def extract_text(response):
-    text = ""
-    for item in response['Blocks']:
-        if item['BlockType'] == 'LINE':
-            text += item['Text'] + '\n'
-    return text
+def is_job_complete(job_id):
+    response = textract_client.get_document_analysis(JobId=job_id)
+    status = response['JobStatus']
+    return status == 'SUCCEEDED', response
 
-# Main app function
 def main():
-    st.title('Amazon Textract OCR Application')
+    st.title('Document Processing with Amazon Textract')
     
     uploaded_file = st.file_uploader("Upload a PDF file", type=['pdf'])
+    bucket_name = 'your-bucket-name' # Ensure this is set to your actual S3 bucket name
     
     if uploaded_file is not None:
-        with st.spinner('Processing...'):
-            response = process_file(uploaded_file)
-            if response:
-                extracted_text = extract_text(response)
-                st.subheader("Extracted Text")
-                st.text_area("Extracted Content", extracted_text, height=300)
+        # Upload to S3
+        object_name = uploaded_file.name
+        if upload_to_s3(uploaded_file, bucket_name, object_name):
+            st.success('File uploaded to S3')
+            
+            # Start Textract job
+            job_id = start_textract_job(bucket_name, object_name)
+            if job_id:
+                st.write(f"Textract Job ID: {job_id}")
+                with st.spinner('Processing document...'):
+                    # Poll for Textract job completion
+                    complete = False
+                    while not complete:
+                        time.sleep(5)
+                        complete, response = is_job_complete(job_id)
+                    st.success('Document processing complete')
+                    
+                    # Display results
+                    # Implement result parsing and display logic here
+                    st.write(response) # Placeholder for result processing logic
 
 if __name__ == '__main__':
     main()
