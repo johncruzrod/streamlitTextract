@@ -46,28 +46,37 @@ def start_job(s3_object):
         st.error(f"Error occurred while starting Textract job: {e}")
         return None
 
-def get_job_results(job_id):
-    try:
-        time.sleep(5)  # Initial delay to let processing start
-        pages = []
+def get_job_results(job_id, timeout=3600):  # Timeout in seconds
+    # Initial delay settings
+    delay = 5
+    max_delay = 60  # Maximum delay between retries
+    start_time = time.time()
+    
+    # Polling loop
+    while True:
         response = textract_client.get_document_analysis(JobId=job_id)
-        pages.append(response)
-
-        # Retrieve all pages of result
-        while 'NextToken' in response:
-            time.sleep(5)
-            response = textract_client.get_document_analysis(JobId=job_id, NextToken=response['NextToken'])
-            pages.append(response)
-
-        # Checking if the last response was successful
-        if response['JobStatus'] == 'SUCCEEDED':
-            return pages
-        else:
-            st.error(f"Document analysis didn't complete successfully. Status: {response['JobStatus']}")
+        status = response['JobStatus']
+        
+        if status in ['SUCCEEDED', 'FAILED']:
+            if status == 'SUCCEEDED':
+                # Collect all pages if paginated results exist
+                pages = [response]
+                while 'NextToken' in response:
+                    response = textract_client.get_document_analysis(JobId=job_id, NextToken=response['NextToken'])
+                    pages.append(response)
+                return pages
+            elif status == 'FAILED':
+                st.error(f"Document analysis has failed with status: {status}")
+                return None
+        
+        # Check for timeout to avoid infinite waiting
+        if time.time() - start_time > timeout:
+            st.error(f'Timeout reached while waiting for document analysis to complete.')
             return None
-    except Exception as e:
-        st.error(f"Error occurred while getting Textract job results: {e}")
-        return None
+        
+        # Sleep before the next check, with exponential backoff
+        time.sleep(delay)
+        delay = min(delay * 2, max_delay)  # Exponential backoff, cap at max_delay
 
 def process_document(pages):
     document_text = ""
