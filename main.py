@@ -169,10 +169,13 @@ def main():
             if key in st.session_state:
                 del st.session_state[key]
         
-    process_button_pressed = st.button('Process Document')
-    
+    should_process_document = 'document_text' not in st.session_state
+    if should_process_document:
+        process_button_pressed = st.button('Process Document')
+
     if process_button_pressed or (uploaded_file is not None and 'document_text' in st.session_state and 'tables' in st.session_state):
         if 'document_text' not in st.session_state:
+            # Upload and process the document, only if not already done
             s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
             if s3_object:
                 job_id = start_job(s3_object)
@@ -180,7 +183,7 @@ def main():
                     results_pages = get_job_results(job_id)
                     if results_pages:
                         document_text, tables, form_fields = process_document(results_pages)
-                        # Store in session state to avoid reprocessing on refresh or after summarizing
+                        # Store in session state to avoid reprocessing
                         st.session_state.document_text = document_text
                         st.session_state.tables = tables
                         st.session_state.uploaded_file_name = uploaded_file.name
@@ -188,8 +191,8 @@ def main():
                         st.error("Document processing failed or did not complete successfully.")
                         return  # Exit early if processing failed
 
-        # At this point, we have the document processed, either from this run or a previous one
-        if 'document_text' in st.session_state:
+        # Show OCR results only when not summarized yet
+        if 'summary' not in st.session_state:
             st.subheader("Extracted Text")
             st.text_area('Extracted Text', st.session_state.document_text, height=150)
             if st.session_state.tables:
@@ -199,20 +202,16 @@ def main():
                     df = pd.read_csv(StringIO(table_csv))
                     st.dataframe(df)
 
-        if 'summary' not in st.session_state:
             summarize_button = st.button('Summarize')
             if summarize_button and 'document_text' in st.session_state:
                 with st.spinner("Summarizing..."):
                     summary = summarize_with_anthropic(st.session_state.document_text, st.session_state.tables)
-                    st.session_state.summary = summary  # Store the summary for accessing after rerun
+                    st.session_state.summary = summary  # Store the summary for displaying
 
+    # Summary is displayed only after the summarization is done, removing the other sections
     if 'summary' in st.session_state:
         st.subheader("Summary")
         st.markdown(st.session_state.summary)
-
-def copy_to_clipboard(text):
-    import pyperclip
-    pyperclip.copy(text)
 
 if __name__ == "__main__":
     main()
