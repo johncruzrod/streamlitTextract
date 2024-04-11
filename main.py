@@ -173,14 +173,14 @@ def main():
                     
                     summarize_clicked = st.session_state.get('summarize_clicked', False)
                     
-                    col1, col2, col3 = st.columns([1, 1, 1])
-                    with col2:
-                        if not summarize_clicked:
+                    if not summarize_clicked:
+                        col1, col2, col3 = st.columns([1, 1, 1])
+                        with col2:
                             summarize_button = st.button('Summarize', type="primary")
                             if summarize_button:
                                 st.session_state.summarize_clicked = True
-                    
-                    if not summarize_clicked:
+                                st.experimental_rerun()  # Force rerun to update the UI
+                        
                         st.subheader("Extracted Text")
                         st.text_area('Text', document_text, height=300)
                         
@@ -190,18 +190,19 @@ def main():
                             df = pd.read_csv(StringIO(table_csv))
                             st.dataframe(df)
                     else:
-                        st.empty()  # Clear the existing content
+                        placeholder = st.empty()  # Create an empty placeholder
                         
-                        with st.spinner("Summarizing..."):
-                            summary = summarize_with_anthropic(document_text, tables)
-                        
-                        st.subheader("Summary")
-                        st.markdown(summary)
-                        
-                        copy_button = st.button("Copy to Clipboard")
-                        if copy_button:
-                            copy_to_clipboard(summary)
-                            st.success("Summary copied to clipboard!")
+                        with placeholder.container():  # Use the placeholder container
+                            with st.spinner("Summarizing..."):
+                                summary = summarize_with_anthropic(document_text, tables)
+                            
+                            st.subheader("Summary")
+                            st.markdown(summary)
+                            
+                            copy_button = st.button("Copy to Clipboard")
+                            if copy_button:
+                                copy_to_clipboard(summary)
+                                st.success("Summary copied to clipboard!")
                 else:
                     st.error("Document processing failed or did not complete successfully.")
 
