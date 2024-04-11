@@ -213,10 +213,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-def copy_to_clipboard(text):
-    import pyperclip
-    pyperclip.copy(text)
-
-if __name__ == "__main__":
-    main()
