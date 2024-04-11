@@ -164,6 +164,7 @@ def main():
     st.title('Amazon Textract Document Processing')
     uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
     bucket_name = 'streamlit-bucket-1'
+    
     if uploaded_file:
         s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
         if s3_object:
@@ -182,12 +183,30 @@ def main():
                         df = pd.read_csv(StringIO(table_csv))
                         st.dataframe(df)
                     
-                    if st.button('Summarize'):
+                    st.markdown("<br>", unsafe_allow_html=True)  # Add some vertical space
+                    
+                    col1, col2, col3 = st.columns([1, 1, 1])
+                    with col2:
+                        summarize_button = st.button('Summarize', type="primary")
+                    
+                    if summarize_button:
                         summary = summarize_with_anthropic(document_text, tables)
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)  # Add some vertical space
+                        
                         st.subheader("Summary")
-                        st.text_area('Summary Output', summary, height=300)
+                        st.markdown(summary)
+                        
+                        copy_button = st.button("Copy to Clipboard")
+                        if copy_button:
+                            copy_to_clipboard(summary)
+                            st.success("Summary copied to clipboard!")
                 else:
                     st.error("Document processing failed or did not complete successfully.")
+
+def copy_to_clipboard(text):
+    import pyperclip
+    pyperclip.copy(text)
 
 if __name__ == "__main__":
     main()
