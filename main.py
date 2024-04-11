@@ -64,22 +64,64 @@ def process_document(response):
     form_fields = {}
     key = ""
 
+    # Track IDs of blocks within tables to avoid duplication in text output
+    table_block_ids = set()
+
     for item in response['Blocks']:
-        if item['BlockType'] == 'LINE':
-            document_text += item['Text'] + '\n'
-        elif item['BlockType'] == 'TABLE':
+        if item['BlockType'] == 'TABLE':
             table_csv = extract_table(item, response['Blocks'])
             tables.append(table_csv)
+            # Add child block IDs to the table_block_ids set
+            for rel in item.get('Relationships', []):
+                if rel['Type'] == 'CHILD':
+                    table_block_ids.update(rel['Ids'])
+
         elif item['BlockType'] == 'KEY_VALUE_SET':
             if 'KEY' in item['EntityTypes']:
                 key = get_text(item, response['Blocks'])
             elif 'VALUE' in item['EntityTypes']:
                 value = get_text(item, response['Blocks'])
                 form_fields[key] = value
+
+        # Extract text, excluding text that is part of tables
+    for item in response['Blocks']:
+        if item['BlockType'] == 'LINE' and item['Id'] not in table_block_ids:
+            document_text += item['Text'] + '\n'
     
     return document_text, tables, form_fields
 
-# The `extract_table` and `get_text` functions from your original code remain unchanged
+def extract_table(table_block, blocks):
+    # Initialize an empty dictionary to hold the table rows and columns
+    table_dict = {}
+    # Iterate through the relationships to find child cells of the table
+    for relationship in table_block.get('Relationships', []):
+        if relationship['Type'] == 'CHILD':
+            for child_id in relationship['Ids']:
+                cell_block = next((block for block in blocks if block['Id'] == child_id), None)
+                if cell_block:
+                    row_index = cell_block.get('RowIndex', 0) - 1
+                    col_index = cell_block.get('ColumnIndex', 0) - 1
+                    if row_index not in table_dict:
+                        table_dict[row_index] = {}
+                    table_dict[row_index][col_index] = get_text(cell_block, blocks)
+    # Convert the dictionary to a pandas DataFrame and then to CSV
+    df = pd.DataFrame.from_dict(table_dict, orient='index').sort_index().fillna('')
+    return df.to_csv(index=False, header=False)
+
+def get_text(block, blocks):
+    text = ""
+    # If the block has relationships, it may have child elements like words
+    for relationship in block.get('Relationships', []):
+        if relationship['Type'] == 'CHILD':
+            for child_id in relationship['Ids']:
+                child_block = next((b for b in blocks if b['Id'] == child_id), None)
+                if child_block:
+                    if 'Text' in child_block:
+                        text += child_block['Text'] + ' '
+    return text.strip()
+
+
+
 
 def main():
     st.title('Amazon Textract Document Processing')
