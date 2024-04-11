@@ -163,48 +163,36 @@ def main():
     bucket_name = 'streamlit-bucket-1'
     
     if uploaded_file:
-        s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
-        if s3_object:
-            job_id = start_job(s3_object)
-            if job_id:
-                results_pages = get_job_results(job_id)
-                if results_pages:
-                    document_text, tables, form_fields = process_document(results_pages)
-                    
-                    summarize_clicked = st.session_state.get('summarize_clicked', False)
-                    
-                    if not summarize_clicked:
-                        col1, col2, col3 = st.columns([1, 1, 1])
-                        with col2:
-                            summarize_button = st.button('Summarize', type="primary")
-                            if summarize_button:
-                                st.session_state.summarize_clicked = True
-                                st.experimental_rerun()  # Force rerun to update the UI
+        # Check if we already have the processed data in the session state
+        if 'uploaded_file_name' not in st.session_state or st.session_state.uploaded_file_name != uploaded_file.name:
+            # Process the file and save results to session state
+            s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
+            if s3_object:
+                job_id = start_job(s3_object)
+                if job_id:
+                    results_pages = get_job_results(job_id)
+                    if results_pages:
+                        document_text, tables, form_fields = process_document(results_pages)
+                        st.session_state.document_text = document_text
+                        st.session_state.tables = tables
+                        st.session_state.uploaded_file_name = uploaded_file.name
                         
-                        st.subheader("Extracted Text")
-                        st.text_area('Text', document_text, height=300)
-                        
-                        st.subheader("Tables")
-                        for i, table_csv in enumerate(tables, start=1):
-                            st.write(f"Table {i}:")
-                            df = pd.read_csv(StringIO(table_csv))
-                            st.dataframe(df)
                     else:
-                        placeholder = st.empty()  # Create an empty placeholder
-                        
-                        with placeholder.container():  # Use the placeholder container
-                            with st.spinner("Summarizing..."):
-                                summary = summarize_with_anthropic(document_text, tables)
-                            
-                            st.subheader("Summary")
-                            st.markdown(summary)
-                            
-                            copy_button = st.button("Copy to Clipboard")
-                            if copy_button:
-                                copy_to_clipboard(summary)
-                                st.success("Summary copied to clipboard!")
-                else:
-                    st.error("Document processing failed or did not complete successfully.")
+                        st.error("Document processing failed or did not complete successfully.")
+        
+        if 'document_text' in st.session_state and 'tables' in st.session_state:
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                summarize_button = st.button('Summarize')
+            
+            if summarize_button:
+                with st.spinner("Summarizing..."):
+                    summary = summarize_with_anthropic(st.session_state.document_text, st.session_state.tables)
+                    st.session_state.summary = summary  # Store the summary in the session state
+                
+            if 'summary' in st.session_state:
+                st.subheader("Summary")
+                st.markdown(st.session_state.summary)
 
 def copy_to_clipboard(text):
     import pyperclip
