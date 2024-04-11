@@ -3,11 +3,17 @@ import boto3
 import time
 import pandas as pd
 from io import StringIO
+import anthropic
+
 
 # Retrieve AWS credentials from Streamlit secrets
 AWS_ACCESS_KEY_ID = st.secrets['AWS_ACCESS_KEY_ID']
 AWS_SECRET_ACCESS_KEY = st.secrets['AWS_SECRET_ACCESS_KEY']
 AWS_REGION_NAME = st.secrets['AWS_REGION_NAME']
+
+# Use Streamlit's secret management to safely store and access your API key and the correct password
+api_key = st.secrets["ANTHROPIC_API_KEY"]
+client = anthropic.Anthropic(api_key=api_key)
 
 # Initialize boto3 clients
 textract_client = boto3.client(
@@ -135,30 +141,50 @@ def get_text(block, blocks):
                     text += child_block['Text'] + ' '
     return text.strip()
 
+def summarize_with_anthropic(content):
+    message = client.messages.create(
+        model="claude-3-opus-20240229",
+        max_tokens=4000,
+        temperature=0.8,
+        messages=[{"content": content}]
+    )
+    return message.content
+
 def main():
     st.title('Amazon Textract Document Processing')
     uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
     bucket_name = 'streamlit-bucket-1'
 
-    if uploaded_file is not None:
+    if uploaded_file:
         s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
         if s3_object:
             job_id = start_job(s3_object)
             if job_id:
                 results_pages = get_job_results(job_id)
-                if results_pages:  # Check if results_pages is not None
+                if results_pages:
                     document_text, tables, form_fields = process_document(results_pages)
+                    
                     st.subheader("Extracted Text")
-                    st.text(document_text)
+                    st.text_area('Text', document_text, height=300)
                     
                     st.subheader("Tables")
+                    all_tables_text = ""
                     for i, table_csv in enumerate(tables, start=1):
                         st.write(f"Table {i}:")
                         df = pd.read_csv(StringIO(table_csv))
                         st.dataframe(df)
+                        all_tables_text += df.to_string(index=False, header=False) + "\n"
+
+                    # Concatenate all text and tables into one string for summarization
+                    full_text = document_text + "\n" + all_tables_text
+
+                    if st.button('Summarize', key='summarize_button'):
+                        summary = summarize_with_anthropic(full_text)
+                        st.subheader("Summary")
+                        st.text_area('Summary Output', summary, height=300)
 
                 else:
                     st.error("Document processing failed or did not complete successfully.")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
