@@ -191,7 +191,6 @@ def main():
                     else:
                         st.error("Document processing failed or did not complete successfully.")
                         return  # Exit early if processing failed
-
         # At this point, we have the document processed, either from this run or a previous one
         if 'document_text' in st.session_state:
             st.subheader("Extracted Text")
@@ -202,14 +201,12 @@ def main():
                     st.write(f"Table {i}:")
                     df = pd.read_csv(StringIO(table_csv))
                     st.dataframe(df)
-
         if 'summary' not in st.session_state:
             summarize_button = st.button('Summarize')
             if summarize_button and 'document_text' in st.session_state:
                 with st.spinner("Summarizing..."):
                     summary = summarize_with_anthropic(st.session_state.document_text, st.session_state.tables)
                     st.session_state.summary = summary  # Store the summary for accessing after rerun
-
     if 'summary' in st.session_state:
         st.subheader("Summary")
         st.markdown(st.session_state.summary)
@@ -223,6 +220,11 @@ def password_form():
             st.session_state.logged_in = True
         else:
             st.sidebar.error("Incorrect password, please try again.")
+
+# Check password function
+def check_password(password):
+    correct_password = st.secrets["PASSWORD"]
+    return password == correct_password
 
 # Check if logged in, if not show password form, else show the main app
 if not st.session_state.logged_in:
