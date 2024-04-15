@@ -143,7 +143,7 @@ def summarize_with_anthropic(document_text, tables):
     try:
         message = client.messages.create(
             model="claude-3-opus-20240229",
-            max_tokens=350,
+            max_tokens=4000,
             temperature=1,
             system=f"Data contents: {full_text}. You will summarize this content in a detailed report. Be precise, and avoid errors.",
             messages=[
