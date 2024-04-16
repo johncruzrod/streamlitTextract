@@ -63,20 +63,13 @@ def get_job_results(job_id):
         time.sleep(5)
 
 def process_document(pages):
-    document_text = ""
     tables = []
-    table_block_ids = set()
     for page in pages:
         for item in page['Blocks']:
             if item['BlockType'] == 'TABLE':
-                table_csv, block_ids = extract_table(item, page['Blocks'])
+                table_csv, _ = extract_table(item, page['Blocks'])
                 tables.append(table_csv)
-                table_block_ids.update(block_ids)
-    for page in pages:
-        for item in page['Blocks']:
-            if item['BlockType'] == 'LINE' and item['Id'] not in table_block_ids:
-                document_text += item['Text'] + '\n'
-    return document_text, tables
+    return tables
 
 def extract_table(table_block, blocks):
     table_dict = {}
@@ -114,7 +107,7 @@ def delete_file_from_s3(bucket_name, file_name):
         st.error(f"Error occurred while deleting file from S3: {str(e)}")
 
 def main():
-    st.title('Amazon Textract Document Processing')
+    st.title('Amazon Textract Table Extraction')
     uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
     bucket_name = 'streamlit-bucket-1'
     
@@ -126,15 +119,15 @@ def main():
                 with st.spinner("Processing document..."):
                     results_pages = get_job_results(job_id)
                     if results_pages:
-                        document_text, tables = process_document(results_pages)
-                        st.subheader("Extracted Text")
-                        st.text_area('Extracted Text', document_text, height=150)
+                        tables = process_document(results_pages)
                         if tables:
                             st.subheader("Extracted Tables")
                             for i, table_csv in enumerate(tables, start=1):
                                 st.write(f"Table {i}:")
                                 df = pd.read_csv(StringIO(table_csv))
                                 st.dataframe(df)
+                        else:
+                            st.info("No tables found in the document.")
                         
                         delete_file_from_s3(bucket_name, uploaded_file.name)
                     else:
