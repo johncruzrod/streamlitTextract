@@ -105,7 +105,7 @@ def get_text(block, blocks):
 def delete_file_from_s3(bucket_name, file_name):
     try:
         s3_client.delete_object(Bucket=bucket_name, Key=file_name)
-        st.success(f"File {file_name} has been deleted from S3.")
+        st.success(f"File {file_name} has been deleted.")
     except Exception as e:
         st.error(f"Error occurred while deleting file from S3: {str(e)}")
 
