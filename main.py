@@ -115,7 +115,7 @@ def main():
 
     # Display the GIF in the left column
     with col1:
-        st.image("https://i.imgur.com/6GdQhZJ.gif")  # Replace with the direct link to your Imgur GIF
+        st.image("https://github.com/johncruzrod/streamlitTextract/blob/main/TextractApp-ezgif.com-video-to-gif-converter.gif")  # Replace with the direct link to your Imgur GIF
 
     # Display the main app in the right column
     with col2:
