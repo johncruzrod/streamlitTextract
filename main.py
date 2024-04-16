@@ -4,10 +4,6 @@ import time
 import pandas as pd
 from io import StringIO
 
-# Initialize session state for 'logged_in' flag if it doesn't exist
-if 'logged_in' not in st.session_state:
-    st.session_state.logged_in = False
-
 # Retrieve AWS credentials from Streamlit secrets
 AWS_ACCESS_KEY_ID = st.secrets['AWS_ACCESS_KEY_ID']
 AWS_SECRET_ACCESS_KEY = st.secrets['AWS_SECRET_ACCESS_KEY']
@@ -144,23 +140,4 @@ def main():
                     else:
                         st.error("Document processing failed or did not complete successfully.")
 
-# Password form
-def password_form():
-    st.sidebar.title("Access")
-    password = st.sidebar.text_input("Enter the password", type="password")
-    if st.sidebar.button("Enter"):
-        if check_password(password):
-            st.session_state.logged_in = True
-        else:
-            st.sidebar.error("Incorrect password, please try again.")
-
-# Check password function
-def check_password(password):
-    correct_password = st.secrets["PASSWORD"]
-    return password == correct_password
-
-# Check if logged in, if not show password form, else show the main app
-if not st.session_state.logged_in:
-    password_form()
-else:
-    main()
+main()
