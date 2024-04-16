@@ -115,7 +115,7 @@ def main():
 
     # Display the GIF in the left column
     with col1:
-        st.image("https://imgur.com/a/cXJvpXl")  # Replace with the actual URL of your GIF
+        st.image("https://i.imgur.com/6GdQhZJ.gif")  # Replace with the direct link to your Imgur GIF
 
     # Display the main app in the right column
     with col2:
