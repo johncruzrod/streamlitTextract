@@ -115,7 +115,7 @@ def main():
 
     # Display the GIF in the left column
     with col1:
-        st.image(‘https://raw.githubusercontent.com/asehmi/fastapi-wrapper-apiness/main/images/fastapi_wrapper_st_demo.gif’)
+        st.image(https://raw.githubusercontent.com/johncruzrod/streamlitTextract/e17ad33084d0a6aa9944c440539ef80bde4b9122/TextractApp-ezgif.com-video-to-gif-converter.gif)
 
     # Display the main app in the right column
     with col2:
