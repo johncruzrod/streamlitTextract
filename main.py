@@ -115,7 +115,7 @@ def main():
 
     # Display the GIF in the left column
     with col1:
-        st.markdown("![Alt Text]("https://github.com/johncruzrod/streamlitTextract/blob/main/TextractApp-ezgif.com-video-to-gif-converter.gif")")
+        st.markdown("![Alt Text](https://github.com/johncruzrod/streamlitTextract/blob/main/TextractApp-ezgif.com-video-to-gif-converter.gif)")
 
     # Display the main app in the right column
     with col2:
