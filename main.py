@@ -4,6 +4,9 @@ import time
 import pandas as pd
 from io import StringIO
 
+# Set the page layout to wide
+st.set_page_config(layout="wide")
+
 # Retrieve AWS credentials from Streamlit secrets
 AWS_ACCESS_KEY_ID = st.secrets['AWS_ACCESS_KEY_ID']
 AWS_SECRET_ACCESS_KEY = st.secrets['AWS_SECRET_ACCESS_KEY']
@@ -107,30 +110,39 @@ def delete_file_from_s3(bucket_name, file_name):
         st.error(f"Error occurred while deleting file from S3: {str(e)}")
 
 def main():
-    st.title('Amazon Textract Table Extraction')
-    uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
-    bucket_name = 'streamlit-bucket-1'
-    
-    if uploaded_file is not None:
-        s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
-        if s3_object:
-            job_id = start_job(s3_object)
-            if job_id:
-                with st.spinner("Processing document..."):
-                    results_pages = get_job_results(job_id)
-                    if results_pages:
-                        tables = process_document(results_pages)
-                        if tables:
-                            st.subheader("Extracted Tables")
-                            for i, table_csv in enumerate(tables, start=1):
-                                st.write(f"Table {i}:")
-                                df = pd.read_csv(StringIO(table_csv))
-                                st.dataframe(df)
+    # Create two columns with a ratio of 30% and 70%
+    col1, col2 = st.columns([3, 7])
+
+    # Display the GIF in the left column
+    with col1:
+        st.image("https://imgur.com/a/cXJvpXl")  # Replace with the actual URL of your GIF
+
+    # Display the main app in the right column
+    with col2:
+        st.title('Amazon Textract Table Extraction')
+        uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'png', 'jpg', 'jpeg'])
+        bucket_name = 'streamlit-bucket-1'
+        
+        if uploaded_file is not None:
+            s3_object = upload_to_s3(uploaded_file, bucket_name, uploaded_file.name)
+            if s3_object:
+                job_id = start_job(s3_object)
+                if job_id:
+                    with st.spinner("Processing document..."):
+                        results_pages = get_job_results(job_id)
+                        if results_pages:
+                            tables = process_document(results_pages)
+                            if tables:
+                                st.subheader("Extracted Tables")
+                                for i, table_csv in enumerate(tables, start=1):
+                                    st.write(f"Table {i}:")
+                                    df = pd.read_csv(StringIO(table_csv))
+                                    st.dataframe(df)
+                            else:
+                                st.info("No tables found in the document.")
+                            
+                            delete_file_from_s3(bucket_name, uploaded_file.name)
                         else:
-                            st.info("No tables found in the document.")
-                        
-                        delete_file_from_s3(bucket_name, uploaded_file.name)
-                    else:
-                        st.error("Document processing failed or did not complete successfully.")
+                            st.error("Document processing failed or did not complete successfully.")
 
 main()
